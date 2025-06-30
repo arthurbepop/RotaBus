@@ -1,0 +1,26 @@
+# Flutter
+build/
+.dart_tool/
+.packages
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# IDEs
+.idea/
+.vscode/
+
+# Arquivos temporários
+*.log
+*.tmp
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Python (se tiver backend no projeto)
+__pycache__/
+*.py[cod]
+venv/
+.env
