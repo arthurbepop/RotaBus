@@ -1,5 +1,6 @@
+
 import 'package:flutter/material.dart';
-import 'telas/linhas_onibus.dart';
+import 'telas/tela_inicial.dart';
 
 void main() {
   runApp(AppOnibus());
@@ -13,7 +14,7 @@ class AppOnibus extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: TelaLinhasOnibus(),
+      home: TelaInicial(),
     );
   }
 }
