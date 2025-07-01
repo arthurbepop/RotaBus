@@ -1,6 +1,8 @@
 
+
 import 'package:flutter/material.dart';
-import 'telas/tela_inicial.dart';
+
+import 'telas/map_screen.dart';
 
 void main() {
   runApp(AppOnibus());
@@ -14,9 +16,13 @@ class AppOnibus extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: TelaInicial(),
+      home: MapScreen(),
     );
   }
 }
-// Este é o ponto de entrada do aplicativo Flutter.
-// Ele inicializa o aplicativo e define o tema e a tela inicial.
+
+
+// Tela do mapa movida para telas/map_screen.dart
+
+
+// Removido: duplicidade da classe _MapScreenState
