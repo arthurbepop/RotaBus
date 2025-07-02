@@ -45,6 +45,26 @@ class _TelaInicialState extends State<TelaInicial> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      endDrawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                leading: Icon(Icons.person),
+                title: Text('Perfil'),
+                onTap: () {},
+              ),
+              Divider(),
+              ListTile(
+                leading: Icon(Icons.account_balance_wallet),
+                title: Text('Saldo'),
+                onTap: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
       body: Stack(
         children: [
           // Mapa de fundo
@@ -58,23 +78,37 @@ class _TelaInicialState extends State<TelaInicial> {
                           target: _currentPosition!,
                           zoom: 15,
                         ),
-                        onMapCreated: (controller) => _mapController = controller,
+                        onMapCreated: (controller) {
+                          _mapController = controller;
+                        },
                         myLocationEnabled: true,
                         myLocationButtonEnabled: true,
                         zoomControlsEnabled: false,
+                        padding: EdgeInsets.only(bottom: 64.0, right: 24.0),
                       ),
           ),
-          // Logo no canto superior esquerdo
-          SafeArea(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Image.asset(
-                  'assets/logosuperior.png',
-                  width: 64,
-                  height: 64,
-                  fit: BoxFit.contain,
+          // Logo colada no topo à esquerda
+          Positioned(
+            top: 0,
+            left: 0,
+            child: Image.asset(
+              'assets/logosuperior.png',
+              width: 170,
+              height: 170,
+              fit: BoxFit.contain,
+            ),
+          ),
+          // Botão menu alinhado ao topo à direita
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 24,
+            child: Builder(
+              builder: (context) => Material(
+                color: Colors.transparent,
+                child: IconButton(
+                  icon: Icon(Icons.menu, color: Colors.black, size: 36),
+                  onPressed: () => Scaffold.of(context).openEndDrawer(),
+                  tooltip: 'Menu',
                 ),
               ),
             ),
