@@ -2,7 +2,7 @@
                 <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
                 <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
-        android:label="frontend_flutter"
+        android:label="RotaBus"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -33,7 +33,7 @@
             android:name="flutterEmbedding"
             android:value="2" />
             <meta-data android:name="com.google.android.geo.API_KEY"
-                android:value="chave da api do google maps aqui" /> <!-- NÃO commitar a chave real da API -->
+                android:value="AIzaSyBr_SRALwrZhEyXZ7dOjevsgkyPSnjguwE" /> <!-- NÃO commitar a chave real da API -->
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

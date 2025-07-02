@@ -1,5 +1,4 @@
 import '../modelos/linha.dart';
-
 class ApiLinhas {
   // Simula um delay como se fosse uma chamada HTTP
   Future<List<Linha>> obterLinhas() async {

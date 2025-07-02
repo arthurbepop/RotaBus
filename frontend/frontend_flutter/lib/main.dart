@@ -1,10 +1,11 @@
 
 import 'package:flutter/material.dart';
+import 'package:frontend_flutter/telas/tela_inicial.dart';
 import 'telas/map_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 Future<void> main() async {
-  await dotenv.load();
+  //await dotenv.load(fileName: ".env");
   runApp(AppOnibus());
 }
 
@@ -16,7 +17,7 @@ class AppOnibus extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: MapScreen(),
+      home: TelaInicial(),
     );
   }
 }
