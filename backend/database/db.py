@@ -4,7 +4,7 @@ import re
 import urllib.parse as up
 import pandas as pd  # se você usa DataFrame para tipagem/IDE
 import psycopg
-from psycopg.extras import execute_values
+from psycopg import sql
 
 
 def _slug(txt: str) -> str:
@@ -87,54 +87,59 @@ class PostgresDB:
 
     # ---------- API pública ---------- #
 
-    def save_schedule(self, linha: str, sentido: str, df: "pd.DataFrame") -> None:
-        """
-        Persistir o DataFrame `df` inteiro na tabela correspondente
-        a (linha, sentido). Se já existir conteúdo, ele é truncado.
+def save_schedule(self, linha: str, sentido: str, df: "pd.DataFrame") -> None:
+    """
+    Persiste o DataFrame `df` na tabela específica de (linha, sentido).
+    Se já existir conteúdo, ele é truncado.
 
-        Parâmetros
-        ----------
-        linha : str
-            Identificador / nome do ônibus.
-        sentido : str
-            Sentido (ex.: "Centro", "Bairro").
-        df : pandas.DataFrame
-            Deve conter a coluna "Estação" e colunas "partida1", "partida2"...
-        """
-        tabela = f'horarios_{_slug(linha)}_{_slug(sentido)}'
+    Parâmetros
+    ----------
+    linha : str
+        Identificador / nome do ônibus.
+    sentido : str
+        Sentido (ex.: "Centro", "Bairro").
+    df : pandas.DataFrame
+        Deve conter a coluna "Estação" e colunas "partida1", "partida2", …
+    """
+    tabela = f"horarios_{_slug(linha)}_{_slug(sentido)}"
 
-        partida_cols = sorted(
-            [c for c in df.columns if c.lower().startswith("partida")],
-            key=lambda x: int(re.search(r"\d+", x).group())
+    # todas as colunas partidaN presentes ordenadas numericamente
+    partida_cols = sorted(
+        [c for c in df.columns if c.lower().startswith("partida")],
+        key=lambda x: int(re.search(r"\d+", x).group()),
+    )
+
+    # cria/atualiza a estrutura da tabela
+    self._ensure_table(tabela, len(partida_cols))
+
+    # transforma o DataFrame em lista de tuplas na ordem das colunas-alvo
+    registros = [
+        (
+            linha,
+            sentido,
+            row["Estação"],
+            *[row.get(c) or None for c in partida_cols],
+        )
+        for _, row in df.iterrows()
+    ]
+
+    col_names = ["onibus", "sentido", "estacao"] + partida_cols
+    placeholders = "(" + ", ".join(["%s"] * len(col_names)) + ")"
+
+    from psycopg import sql  # import local para evitar custo se método não for usado
+
+    with self.conn.cursor() as cur:
+        # limpa tabela
+        cur.execute(sql.SQL("TRUNCATE {}").format(sql.Identifier(tabela)))
+
+        # insere em lote com executemany (psycopg3 já otimiza internamente)
+        cur.executemany(
+            f"INSERT INTO {tabela} ({', '.join(col_names)}) VALUES {placeholders}",
+            registros,
         )
 
-        self._ensure_table(tabela, len(partida_cols))
+    print(
+        f"✔ Gravado {len(df)} estações na tabela '{tabela}' "
+        f"(ônibus={linha}, sentido='{sentido}')."
+    )
 
-        # monta lista de tuplas na mesma ordem das colunas a inserir
-        registros = []
-        for _, row in df.iterrows():
-            registros.append(
-                (
-                    linha,
-                    sentido,
-                    row["Estação"],
-                    *[row.get(c) or None for c in partida_cols],
-                )
-            )
-
-        col_names = ["onibus", "sentido", "estacao"] + partida_cols
-        placeholders = "(" + ", ".join(["%s"] * len(col_names)) + ")"
-
-        with self.conn.cursor() as cur:
-            cur.execute(f"TRUNCATE {tabela};")  # limpa antes de inserir
-            execute_values(
-                cur,
-                f"INSERT INTO {tabela} ({', '.join(col_names)}) VALUES %s;",
-                registros,
-                template=placeholders,
-            )
-
-        print(
-            f"✔ Gravado {len(df)} estações na tabela '{tabela}' "
-            f"(ônibus={linha}, sentido='{sentido}')."
-        )
