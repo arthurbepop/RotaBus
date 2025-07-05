@@ -3,7 +3,7 @@ import '../modelos/linha.dart';
 
 class ApiLinhas {
   final Dio _dio = Dio();
-  final String baseUrl = 'http://192.168.0.10:5000'; // Troque pelo IP do seu computador
+  final String baseUrl = 'http://192.168.0.10'; // Troque pelo IP do seu computador
 
   Future<List<Linha>> obterLinhas() async {
     try {
