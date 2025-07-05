@@ -1,22 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
+import 'dart:async';
+import 'linhas_onibus.dart';
+import 'detalhes_linha.dart';
 
 class MapScreen extends StatefulWidget {
   @override
   _MapScreenState createState() => _MapScreenState();
 }
 
-
 class _MapScreenState extends State<MapScreen> {
   LatLng? _currentPosition;
   GoogleMapController? _mapController;
   String? _erroLocalizacao;
+  TextEditingController _searchController = TextEditingController();
+  List<String> _linhasDisponiveis = [
+    'Linha 01 - Centro',
+    'Linha 02 - Bom Jesus', 
+    'Linha 03 - Universitário',
+    'Linha 04 - Industrial',
+    'Linha 05 - Shopping',
+    'Linha 06 - Aeroporto',
+    'Linha 07 - Rodoviária',
+  ];
+  List<String> _linhasFiltradas = [];
+  bool _showSuggestions = false;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
+    _linhasFiltradas = _linhasDisponiveis;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filtrarLinhas(String busca) {
+    setState(() {
+      if (busca.isEmpty) {
+        _linhasFiltradas = _linhasDisponiveis;
+        _showSuggestions = false;
+      } else {
+        _linhasFiltradas = _linhasDisponiveis
+            .where((linha) => linha.toLowerCase().contains(busca.toLowerCase()))
+            .toList();
+        _showSuggestions = _linhasFiltradas.isNotEmpty;
+      }
+    });
+  }
+
+  void _selecionarLinha(String linha) {
+    _searchController.text = linha;
+    setState(() {
+      _showSuggestions = false;
+    });
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TelaDetalhesLinha(nomeLinha: linha),
+      ),
+    );
   }
 
   Future<void> _getCurrentLocation() async {
@@ -43,20 +92,189 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Linhas de Ônibus'),
+        title: Text(
+          'RotaBus',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+        backgroundColor: Colors.blue, // Voltando para a cor original
+        foregroundColor: Colors.white,
+        elevation: 2,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.blue,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    'RotaBus',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Transporte Público - Santa Cruz do Sul',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: Icon(Icons.directions_bus, color: Colors.blue),
+              title: Text('Linhas de Ônibus'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => TelaLinhasOnibus()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.location_on, color: Colors.green),
+              title: Text('Paradas Próximas'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Funcionalidade em desenvolvimento')),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.schedule, color: Colors.orange),
+              title: Text('Horários'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Funcionalidade em desenvolvimento')),
+                );
+              },
+            ),
+            Divider(),
+            ListTile(
+              leading: Icon(Icons.person, color: Colors.grey),
+              title: Text('Perfil'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.account_balance_wallet, color: Colors.grey),
+              title: Text('Saldo'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
       body: _erroLocalizacao != null
           ? Center(child: Text(_erroLocalizacao!, style: TextStyle(color: Colors.red, fontSize: 18)))
           : _currentPosition == null
               ? Center(child: CircularProgressIndicator())
-              : GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: _currentPosition!,
-                    zoom: 15,
-                  ),
-                  onMapCreated: (controller) => _mapController = controller,
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
+              : Stack(
+                  children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: _currentPosition!,
+                        zoom: 15,
+                      ),
+                      onMapCreated: (controller) => _mapController = controller,
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: true,
+                    ),
+                    // BARRA DE PESQUISA
+                    Positioned(
+                      top: 10, // Mais próximo da AppBar
+                      left: 16,
+                      right: 16,
+                      child: Column(
+                        children: [
+                          // Campo de busca
+                          Container(
+                            height: 60, // Altura fixa maior
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(25),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3), // Sombra mais forte
+                                  blurRadius: 15,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              decoration: InputDecoration(
+                                hintText: 'Digite a linha (ex: Linha 01)',
+                                hintStyle: TextStyle(color: Colors.grey),
+                                prefixIcon: Icon(Icons.directions_bus, color: Colors.blue),
+                                suffixIcon: _searchController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(Icons.clear),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          _filtrarLinhas('');
+                                        },
+                                      )
+                                    : null,
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                              ),
+                              onChanged: (value) {
+                                _filtrarLinhas(value);
+                              },
+                            ),
+                          ),
+                          // Lista de sugestões
+                          if (_showSuggestions && _linhasFiltradas.isNotEmpty)
+                            Container(
+                              margin: EdgeInsets.only(top: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 10,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              constraints: BoxConstraints(maxHeight: 200),
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: _linhasFiltradas.length,
+                                itemBuilder: (context, index) {
+                                  final linha = _linhasFiltradas[index];
+                                  return ListTile(
+                                    leading: Icon(Icons.directions_bus, color: Colors.blue),
+                                    title: Text(linha),
+                                    onTap: () => _selecionarLinha(linha),
+                                  );
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
     );
   }
