@@ -1,8 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
-
+import 'dart:async';
 
 class TelaInicial extends StatefulWidget {
   const TelaInicial({Key? key}) : super(key: key);
@@ -82,20 +81,38 @@ class _TelaInicialState extends State<TelaInicial> {
                           _mapController = controller;
                         },
                         myLocationEnabled: true,
-                        myLocationButtonEnabled: true,
+                        myLocationButtonEnabled: false,
                         zoomControlsEnabled: false,
                         padding: EdgeInsets.only(bottom: 64.0, right: 24.0),
                       ),
           ),
-          // Logo colada no topo à esquerda
+          // Logo estilizada substituída por texto estilizado "RotaBus"
           Positioned(
-            top: 0,
+            top: MediaQuery.of(context).padding.top + 24,
             left: 0,
-            child: Image.asset(
-              'assets/logosuperior.png',
-              width: 170,
-              height: 170,
-              fit: BoxFit.contain,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: RichText(
+                text: TextSpan(
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Roboto',
+                    color: Colors.black,
+                  ),
+                  children: [
+                    TextSpan(text: 'Rota'),
+                    TextSpan(
+                      text: 'Bus',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontFamily: 'Pacifico',
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           // Botão menu alinhado ao topo à direita
@@ -114,6 +131,71 @@ class _TelaInicialState extends State<TelaInicial> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  @override
+  _SplashScreenState createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  Animation<double>? _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    _animation = CurvedAnimation(parent: _controller!, curve: Curves.easeIn);
+    _controller!.forward();
+    Timer(const Duration(seconds: 3), () {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => TelaInicial()),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: FadeTransition(
+          opacity: _animation!,
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: 38,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Roboto',
+                color: Colors.black,
+              ),
+              children: [
+                TextSpan(text: 'Rota'),
+                TextSpan(
+                  text: 'Bus',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    fontFamily: 'Pacifico',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
