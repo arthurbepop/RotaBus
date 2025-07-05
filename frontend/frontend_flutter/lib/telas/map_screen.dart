@@ -102,16 +102,66 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'RotaBus',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
+        title: RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'Rota',
+                style: TextStyle(
+                  fontWeight: FontWeight.w300, // Mais leve
+                  fontSize: 22,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              TextSpan(
+                text: 'Bus',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700, // Mais pesado para contraste
+                  fontSize: 22,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                  shadows: [
+                    Shadow(
+                      offset: Offset(1, 1),
+                      blurRadius: 3.0,
+                      color: Colors.black26,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-        backgroundColor: Colors.blue, // Voltando para a cor original
+        backgroundColor: Colors.transparent, // Transparente para mostrar gradiente
         foregroundColor: Colors.white,
-        elevation: 2,
+        elevation: 0, // Remove sombra padrão
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.blue[600]!,
+                Colors.blue[700]!,
+                Colors.blue[800]!,
+              ],
+              stops: [0.0, 0.5, 1.0],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blue.withOpacity(0.3),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+        ),
+        iconTheme: IconThemeData(
+          color: Colors.white,
+          size: 26,
+        ),
+        toolbarHeight: 65, // Altura maior para visual mais moderno
       ),
       drawer: Drawer(
         child: ListView(
@@ -119,18 +169,71 @@ class _MapScreenState extends State<MapScreen> {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.blue,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Colors.blue[600]!,
+                    Colors.blue[700]!,
+                    Colors.blue[800]!,
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    'RotaBus',
-                    style: TextStyle(
+                  // Ícone do app no drawer
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: Icon(
+                      Icons.directions_bus,
                       color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                      size: 28,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Rota',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'Bus',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            shadows: [
+                              Shadow(
+                                offset: Offset(1, 1),
+                                blurRadius: 2.0,
+                                color: Colors.black26,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   SizedBox(height: 8),

@@ -130,24 +130,38 @@ class _SplashScreenState extends State<SplashScreen>
                 },
               ),
               
-              SizedBox(height: 40),
-              
-              // Texto animado
-              SlideTransition(
-                position: _slideAnimation,
-                child: FadeTransition(
-                  opacity: _textAnimation,
-                  child: Column(
-                    children: [
-                      Text(
-                        'RotaBus',
-                        style: TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 2,
-                        ),
-                      ),
+              SizedBox(height: 40),                      // Texto animado com estilo personalizado
+                      SlideTransition(
+                        position: _slideAnimation,
+                        child: FadeTransition(
+                          opacity: _textAnimation,
+                          child: Column(
+                            children: [
+                              // Logo "RotaBus" estilizado
+                              RichText(
+                                text: TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: 'Rota',
+                                      style: TextStyle(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 2,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: 'Bus',
+                                      style: TextStyle(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue[900], // Azul mais escuro
+                                        letterSpacing: 2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                       SizedBox(height: 8),
                       Text(
                         'Transporte Público Inteligente',
