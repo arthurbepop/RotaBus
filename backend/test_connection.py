@@ -20,9 +20,9 @@ except ImportError:
 DATABASE_CONFIG = {
     "host": "localhost",
     "port": 5432,
-    "database": "postgres",  # SUBSTITUA pelo nome do seu banco
+    "dbname": "RotaBus",  # SUBSTITUA pelo nome do seu banco
     "user": "postgres",      # SUBSTITUA pelo seu usuário
-    "password": "admin"      # SUBSTITUA pela sua senha
+    "password": "12345"      # SUBSTITUA pela sua senha
 }
 
 def test_connection():
