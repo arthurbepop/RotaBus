@@ -8,12 +8,15 @@ class TelaLinhasOnibus extends StatefulWidget {
 }
 
 class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
-  late Future<List<Linha>> linhas;
+  final ApiLinhas _apiLinhas = ApiLinhas();
 
-  @override
-  void initState() {
-    super.initState();
-    linhas = ApiLinhas().obterLinhas();
+  Future<List<Linha>> _carregarLinhas() async {
+    try {
+      return await _apiLinhas.obterLinhas();
+    } catch (e) {
+      print('Erro ao carregar linhas: $e');
+      return [];
+    }
   }
 
   @override
@@ -23,7 +26,7 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
         title: Text('Linhas de Ônibus'),
       ),
       body: FutureBuilder<List<Linha>>(
-        future: linhas,
+        future: _carregarLinhas(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());

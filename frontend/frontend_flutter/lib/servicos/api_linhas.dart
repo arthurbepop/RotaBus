@@ -1,15 +1,38 @@
+import 'package:dio/dio.dart';
 import '../modelos/linha.dart';
+
 class ApiLinhas {
-  // Simula um delay como se fosse uma chamada HTTP
+  final Dio _dio = Dio();
+  final String baseUrl = 'http://192.168.0.10:5000'; // Troque pelo IP do seu computador
+
   Future<List<Linha>> obterLinhas() async {
-    await Future.delayed(Duration(seconds: 1));
-    return [
-      Linha(id: '1', nome: 'Linha 1 - Centro'),
-      Linha(id: '2', nome: 'Linha 2 - Bairro A'),
-      Linha(id: '3', nome: 'Linha 3 - Bairro B'),
-      Linha(id: '4', nome: 'Linha 4 - Terminal'),
-    ];
+    try {
+      final response = await _dio.get('$baseUrl/linhas');
+      final List dados = response.data;
+      return dados.map((json) => Linha.fromJson(json)).toList();
+    } catch (e) {
+      print('Erro ao buscar linhas: $e');
+      return []; // Retorna lista vazia em caso de erro
+    }
+  }
+
+  Future<List<dynamic>> obterParadas(String codigo) async {
+    try {
+      final response = await _dio.get('$baseUrl/linhas/$codigo/paradas');
+      return response.data;
+    } catch (e) {
+      print('Erro ao buscar paradas: $e');
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> obterHorarios(String codigo) async {
+    try {
+      final response = await _dio.get('$baseUrl/linhas/$codigo/horarios');
+      return response.data;
+    } catch (e) {
+      print('Erro ao buscar horários: $e');
+      return [];
+    }
   }
 }
-// Esta classe simula uma API que retorna uma lista de linhas de ônibus.
-// Em um aplicativo real, você faria uma requisição HTTP para obter esses dados.
