@@ -1,5 +1,5 @@
-psycopg2-binary
 selenium
 webdriver-manager
-pandas
-python-dotenv        
+python-dotenv
+pandas==2.2.2
+psycopg[binary]==3.2.9
