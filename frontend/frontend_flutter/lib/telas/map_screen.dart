@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'dart:async';
 import 'linhas_onibus.dart';
 import 'detalhes_linha.dart';
+import '../servicos/api_service.dart';
 
 class MapScreen extends StatefulWidget {
   @override
@@ -15,23 +16,32 @@ class _MapScreenState extends State<MapScreen> {
   GoogleMapController? _mapController;
   String? _erroLocalizacao;
   TextEditingController _searchController = TextEditingController();
-  List<String> _linhasDisponiveis = [
-    'Linha 01 - Centro',
-    'Linha 02 - Bom Jesus', 
-    'Linha 03 - Universitário',
-    'Linha 04 - Industrial',
-    'Linha 05 - Shopping',
-    'Linha 06 - Aeroporto',
-    'Linha 07 - Rodoviária',
-  ];
+  final ApiService _apiService = ApiService();
+  List<String> _linhasDisponiveis = [];
   List<String> _linhasFiltradas = [];
   bool _showSuggestions = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
-    _linhasFiltradas = _linhasDisponiveis;
+    _carregarLinhas();
+  }
+
+  Future<void> _carregarLinhas() async {
+    try {
+      final linhas = await _apiService.buscarLinhas();
+      setState(() {
+        _linhasDisponiveis = linhas.map((linha) => linha['nome'].toString()).toList();
+        _linhasFiltradas = _linhasDisponiveis;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override

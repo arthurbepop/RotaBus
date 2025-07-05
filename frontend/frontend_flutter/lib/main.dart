@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'telas/map_screen.dart';
+import 'telas/splash_screen.dart';
 
 void main() {
   runApp(AppOnibus());
@@ -12,8 +12,9 @@ class AppOnibus extends StatelessWidget {
       title: 'RotaBus',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: MapScreen(), // CHAMANDO DIRETAMENTE O MAP_SCREEN
+      home: SplashScreen(), // INICIA COM SPLASH SCREEN ANIMADA
       debugShowCheckedModeBanner: false,
     );
   }
