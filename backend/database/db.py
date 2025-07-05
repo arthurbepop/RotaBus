@@ -6,7 +6,7 @@ import pandas as pd  # se você usa DataFrame para tipagem/IDE
 import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
-from .config import DATABASE_CONFIG
+from backend.config import DATABASE_CONFIG
 
 
 def _slug(txt: str) -> str:
@@ -148,7 +148,7 @@ class PostgresDB:
     def get_linhas(self):
         """Retorna lista de todas as linhas de ônibus"""
         try:
-            with self.conn.cursor() as cur:
+            with self.conn.cursor(row_factory=dict_row) as cur:
                 # Busca linhas únicas das tabelas de horários
                 cur.execute("""
                     SELECT DISTINCT 
@@ -168,7 +168,7 @@ class PostgresDB:
     def get_paradas(self, codigo):
         """Retorna paradas de uma linha específica"""
         try:
-            with self.conn.cursor() as cur:
+            with self.conn.cursor(row_factory=dict_row) as cur:
                 # Busca a primeira tabela de horários dessa linha para pegar as paradas
                 cur.execute("""
                     SELECT table_name FROM information_schema.tables 
@@ -181,13 +181,13 @@ class PostgresDB:
                     return []
                 
                 # Busca as estações/paradas da tabela
-                cur.execute(f"""
+                cur.execute(f'''
                     SELECT DISTINCT "Estação" as nome, 
                            ROW_NUMBER() OVER (ORDER BY "Estação") as ordem
                     FROM {table['table_name']} 
                     WHERE "Estação" IS NOT NULL 
                     ORDER BY ordem
-                """)
+                ''')
                 results = cur.fetchall()
                 return [{'nome': row['nome'], 'ordem': row['ordem']} for row in results]
         except Exception as e:
@@ -197,7 +197,7 @@ class PostgresDB:
     def get_horarios(self, codigo):
         """Retorna horários de uma linha específica"""
         try:
-            with self.conn.cursor() as cur:
+            with self.conn.cursor(row_factory=dict_row) as cur:
                 # Busca todas as tabelas de horários dessa linha
                 cur.execute("""
                     SELECT table_name FROM information_schema.tables 
@@ -213,13 +213,11 @@ class PostgresDB:
                     
                     # Busca os dados da tabela
                     cur.execute(f'SELECT * FROM {table["table_name"]}')
-                    columns = [desc[0] for desc in cur.description]
                     rows = cur.fetchall()
                     
                     for row in rows:
-                        horario_data = {'sentido': sentido}
-                        for i, col in enumerate(columns):
-                            horario_data[col] = row[i]
+                        horario_data = dict(row)  # row já é dict
+                        horario_data['sentido'] = sentido
                         all_horarios.append(horario_data)
                 
                 return all_horarios
