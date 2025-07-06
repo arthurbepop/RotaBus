@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'dart:async';
 import 'linhas_onibus.dart';
 import 'detalhes_linha.dart';
 import '../servicos/api_service.dart';
+import '../componentes/menu_lateral_melhorado.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -197,141 +199,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         toolbarHeight: 65, // Altura maior para visual mais moderno
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.blue[600]!,
-                    Colors.blue[700]!,
-                    Colors.blue[800]!,
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  // Ícone do app no drawer
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Icon(
-                      Icons.directions_bus,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Rota',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'Bus',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            shadows: [
-                              Shadow(
-                                offset: Offset(1, 1),
-                                blurRadius: 2.0,
-                                color: Colors.black26,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Transporte Público - Santa Cruz do Sul',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.directions_bus, color: Colors.blue),
-              title: Text('Linhas de Ônibus'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => TelaLinhasOnibus()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.location_on, color: Colors.green),
-              title: Text('Paradas Próximas'),
-              onTap: () async {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Carregando paradas...')),
-                );
-                await _mostrarParadasProximas();
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.schedule, color: Colors.orange),
-              title: Text('Horários'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Funcionalidade em desenvolvimento')),
-                );
-              },
-            ),
-            Divider(),
-            ListTile(
-              leading: Icon(Icons.person, color: Colors.grey),
-              title: Text('Perfil'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: Colors.grey),
-              title: Text('Saldo'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: MenuLateralMelhorado(),
       body: _erroLocalizacao != null
           ? Center(child: Text(_erroLocalizacao!, style: TextStyle(color: Colors.red, fontSize: 18)))
           : _currentPosition == null
