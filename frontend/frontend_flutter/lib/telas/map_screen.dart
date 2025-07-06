@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import '../componentes/menu_lateral_melhorado.dart';
 import 'package:intl/intl.dart';
+import '../modelos/linha.dart';
 
 class MapScreen extends StatefulWidget {
   @override
@@ -24,8 +25,8 @@ class _MapScreenState extends State<MapScreen> {
   String? _erroLocalizacao;
   TextEditingController _searchController = TextEditingController();
   final ApiService _apiService = ApiService();
-  List<String> _linhasDisponiveis = [];
-  List<String> _linhasFiltradas = [];
+  List<Linha> _linhasDisponiveis = [];
+  List<Linha> _linhasFiltradas = [];
   bool _showSuggestions = false;
   Set<Marker> _paradaMarkers = {};
   Set<Marker> _todasParadasMarkers = {}; // Guarda todos os marcadores
@@ -60,12 +61,13 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final linhas = await _apiService.buscarLinhas();
       setState(() {
-        _linhasDisponiveis = linhas.map((linha) => linha['nome'].toString()).toList();
+        _linhasDisponiveis = linhas.map((json) => Linha.fromJson(json)).toList();
         _linhasFiltradas = _linhasDisponiveis;
       });
     } catch (e) {
       setState(() {
-        
+        _linhasDisponiveis = [];
+        _linhasFiltradas = [];
       });
     }
   }
@@ -83,23 +85,26 @@ class _MapScreenState extends State<MapScreen> {
         _showSuggestions = false;
       } else {
         _linhasFiltradas = _linhasDisponiveis
-            .where((linha) => linha.toLowerCase().contains(busca.toLowerCase()))
+            .where((linha) => linha.nome.toLowerCase().contains(busca.toLowerCase()))
             .toList();
         _showSuggestions = _linhasFiltradas.isNotEmpty;
       }
     });
   }
 
-  void _selecionarLinha(String linha) {
-    _searchController.text = linha;
+  void _selecionarLinha(String nomeLinha) {
+    _searchController.text = nomeLinha;
     setState(() {
       _showSuggestions = false;
     });
-    
+    final linhaObj = _linhasDisponiveis.firstWhere(
+      (l) => l.nome == nomeLinha,
+      orElse: () => _linhasDisponiveis.first,
+    );
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => TelaDetalhesLinha(nomeLinha: linha),
+        builder: (context) => TelaDetalhesLinha(linha: linhaObj),
       ),
     );
   }
@@ -295,7 +300,9 @@ class _MapScreenState extends State<MapScreen> {
         ),
         toolbarHeight: 65, // Altura maior para visual mais moderno
       ),
-      drawer: MenuLateralMelhorado(),
+      drawer: MenuLateralMelhorado(
+        onParadasProximas: _mostrarParadasProximas,
+      ),
       body: _erroLocalizacao != null
           ? Center(child: Text(_erroLocalizacao!, style: TextStyle(color: Colors.red, fontSize: 18)))
           : _currentPosition == null
@@ -382,8 +389,8 @@ class _MapScreenState extends State<MapScreen> {
                                   final linha = _linhasFiltradas[index];
                                   return ListTile(
                                     leading: Icon(Icons.directions_bus, color: Colors.blue),
-                                    title: Text(linha),
-                                    onTap: () => _selecionarLinha(linha),
+                                    title: Text(linha.nome),
+                                    onTap: () => _selecionarLinha(linha.nome),
                                   );
                                 },
                               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../modelos/linha.dart';
 import '../servicos/api_linhas.dart';
+import 'detalhes_linha.dart';
 
 class TelaLinhasOnibus extends StatefulWidget {
   @override
@@ -44,9 +45,13 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
               return ListTile(
                 leading: Icon(Icons.directions_bus),
                 title: Text(linha.nome),
+                subtitle: Text('Sentido: ${linha.sentido}'),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Selecionada: ${linha.nome}')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TelaDetalhesLinha(linha: linha),
+                    ),
                   );
                 },
               );
@@ -62,6 +67,6 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
 // Quando os dados estão sendo carregados, exibe um CircularProgressIndicator.
 // Se ocorrer um erro, exibe uma mensagem de erro.
 // Se não houver dados, exibe uma mensagem informando que nenhuma linha foi encontrada.
-// Quando uma linha é selecionada, exibe um SnackBar com o nome da linha selecionada.
 // A lista de linhas é exibida em um ListView, onde cada item é um ListTile com um ícone de ônibus e o nome da linha.
-// O código é organizado para ser fácil de entender e manter, seguindo boas práticas de desenvolvimento Flutter
+// O código é organizado para ser fácil de entender e manter, seguindo boas práticas de desenvolvimento Flutter.
+// A tela foi atualizada para exibir o sentido da linha e navegar para uma tela de detalhes ao selecionar uma linha.

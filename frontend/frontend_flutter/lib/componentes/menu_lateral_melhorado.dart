@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../telas/tela_saldo.dart';
+import '../telas/linhas_onibus.dart';
 import '../servicos/saldo_manager_corrigido.dart';
 
 class MenuLateralMelhorado extends StatelessWidget {
+  final VoidCallback? onParadasProximas;
+  MenuLateralMelhorado({this.onParadasProximas});
+
   @override
   Widget build(BuildContext context) {
     final saldoManager = SaldoManagerCorrigido();
@@ -107,8 +111,7 @@ class MenuLateralMelhorado extends StatelessWidget {
             onTap: () {
               Navigator.pop(context);
               HapticFeedback.lightImpact();
-              // Navigator.push(context, MaterialPageRoute(builder: (context) => TelaLinhasOnibus()));
-              _showSnackBar(context, 'Navegando para Linhas de Ônibus', Colors.blue);
+              Navigator.push(context, MaterialPageRoute(builder: (context) => TelaLinhasOnibus()));
             },
           ),
           
@@ -122,7 +125,9 @@ class MenuLateralMelhorado extends StatelessWidget {
             onTap: () {
               Navigator.pop(context);
               HapticFeedback.lightImpact();
-              _showSnackBar(context, 'Funcionalidade implementada no MapScreen', Colors.green);
+              if (onParadasProximas != null) {
+                onParadasProximas!();
+              }
             },
           ),
           
@@ -163,20 +168,6 @@ class MenuLateralMelhorado extends StatelessWidget {
           
           // SEÇÃO: CONTA
           _buildSectionHeader('CONTA'),
-          
-          // Perfil
-          _buildMenuItem(
-            context: context,
-            icon: Icons.person,
-            iconColor: Colors.grey[600]!,
-            title: 'Perfil',
-            isActive: true,
-            onTap: () {
-              Navigator.pop(context);
-              HapticFeedback.lightImpact();
-              _showSnackBar(context, 'Gerenciar perfil do usuário', Colors.grey[600]!);
-            },
-          ),
           
           // Saldo
           _buildMenuItem(

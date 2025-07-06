@@ -146,56 +146,34 @@ class PostgresDB:
         )
 
     def get_linhas(self):
-        """Retorna lista de todas as linhas de ônibus"""
+        """Retorna lista de todas as linhas de ônibus e sentidos"""
         try:
             with self.conn.cursor(row_factory=dict_row) as cur:
-                # Busca linhas únicas das tabelas de horários
+                # Busca linhas e sentidos únicos das tabelas de horários
                 cur.execute("""
                     SELECT DISTINCT 
-                        SUBSTRING(table_name FROM 'horarios_(.+)_.*') as codigo,
-                        SUBSTRING(table_name FROM 'horarios_(.+)_.*') as nome
+                        SUBSTRING(table_name FROM 'horarios_([^_]+)_([^_]+)') as codigo,
+                        SUBSTRING(table_name FROM 'horarios_([^_]+)_([^_]+)') as nome,
+                        SUBSTRING(table_name FROM 'horarios_[^_]+_([^_]+)') as sentido
                     FROM information_schema.tables 
                     WHERE table_name LIKE 'horarios_%'
                     AND table_schema = 'public'
-                    ORDER BY codigo
+                    ORDER BY codigo, sentido
                 """)
                 results = cur.fetchall()
-                return [{'id': row['codigo'], 'nome': f"Linha {row['codigo']}"} for row in results]
+                return [
+                    {
+                        'id': row['codigo'],
+                        'nome': f"Linha {row['codigo']}",
+                        'sentido': row['sentido']
+                    } for row in results
+                ]
         except Exception as e:
             print(f"Erro ao buscar linhas: {e}")
             return []
 
     def get_paradas(self, codigo):
-        """Retorna paradas de uma linha específica"""
-        try:
-            with self.conn.cursor(row_factory=dict_row) as cur:
-                # Busca a primeira tabela de horários dessa linha para pegar as paradas
-                cur.execute("""
-                    SELECT table_name FROM information_schema.tables 
-                    WHERE table_name LIKE %s AND table_schema = 'public'
-                    LIMIT 1
-                """, (f'horarios_{codigo}_%',))
-                
-                table = cur.fetchone()
-                if not table:
-                    return []
-                
-                # Busca as estações/paradas da tabela
-                cur.execute(f'''
-                    SELECT DISTINCT "Estação" as nome, 
-                           ROW_NUMBER() OVER (ORDER BY "Estação") as ordem
-                    FROM {table['table_name']} 
-                    WHERE "Estação" IS NOT NULL 
-                    ORDER BY ordem
-                ''')
-                results = cur.fetchall()
-                return [{'nome': row['nome'], 'ordem': row['ordem']} for row in results]
-        except Exception as e:
-            print(f"Erro ao buscar paradas: {e}")
-            return []
-
-    def get_horarios(self, codigo):
-        """Retorna horários de uma linha específica"""
+        """Retorna paradas de uma linha específica (todos os sentidos)"""
         try:
             with self.conn.cursor(row_factory=dict_row) as cur:
                 # Busca todas as tabelas de horários dessa linha
@@ -203,23 +181,35 @@ class PostgresDB:
                     SELECT table_name FROM information_schema.tables 
                     WHERE table_name LIKE %s AND table_schema = 'public'
                 """, (f'horarios_{codigo}_%',))
-                
+                tables = cur.fetchall()
+                paradas = set()
+                for table in tables:
+                    cur.execute(f'SELECT DISTINCT estacao FROM {table["table_name"]} WHERE estacao IS NOT NULL')
+                    for row in cur.fetchall():
+                        paradas.add(row['estacao'])
+                return [{'nome': nome} for nome in sorted(paradas)]
+        except Exception as e:
+            print(f"Erro ao buscar paradas: {e}")
+            return []
+
+    def get_horarios(self, codigo):
+        """Retorna horários de uma linha específica (todos os sentidos)"""
+        try:
+            with self.conn.cursor(row_factory=dict_row) as cur:
+                cur.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name LIKE %s AND table_schema = 'public'
+                """, (f'horarios_{codigo}_%',))
                 tables = cur.fetchall()
                 all_horarios = []
-                
                 for table in tables:
-                    # Extrai o sentido do nome da tabela
                     sentido = table['table_name'].split('_')[-1]
-                    
-                    # Busca os dados da tabela
                     cur.execute(f'SELECT * FROM {table["table_name"]}')
                     rows = cur.fetchall()
-                    
                     for row in rows:
-                        horario_data = dict(row)  # row já é dict
+                        horario_data = dict(row)
                         horario_data['sentido'] = sentido
                         all_horarios.append(horario_data)
-                
                 return all_horarios
         except Exception as e:
             print(f"Erro ao buscar horários: {e}")
