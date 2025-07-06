@@ -5,6 +5,8 @@ import 'dart:async';
 import 'linhas_onibus.dart';
 import 'detalhes_linha.dart';
 import '../servicos/api_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class MapScreen extends StatefulWidget {
   @override
@@ -21,6 +23,8 @@ class _MapScreenState extends State<MapScreen> {
   List<String> _linhasFiltradas = [];
   bool _showSuggestions = false;
   bool _isLoading = true;
+  Set<Marker> _paradaMarkers = {};
+  bool _paradasCarregadas = false;
 
   @override
   void initState() {
@@ -95,6 +99,36 @@ class _MapScreenState extends State<MapScreen> {
         _currentPosition = null;
         _erroLocalizacao = 'Não foi possível obter sua localização. Verifique as permissões do app.';
       });
+    }
+  }
+
+  Future<void> _mostrarParadasProximas() async {
+    if (_paradasCarregadas) return; // Só carrega uma vez
+    final url = Uri.parse('http://192.168.0.10:5000/paradas'); // Ajuste o IP se necessário
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      List<dynamic> paradas = json.decode(response.body);
+      Set<Marker> markers = {};
+      for (var parada in paradas) {
+        if (parada['lat'] != null && parada['lng'] != null) {
+          markers.add(
+            Marker(
+              markerId: MarkerId(parada['estacao'] ?? parada['nome'] ?? ''),
+              position: LatLng(parada['lat'], parada['lng']),
+              infoWindow: InfoWindow(title: parada['estacao'] ?? parada['nome'] ?? ''),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure), // azul claro
+            ),
+          );
+        }
+      }
+      setState(() {
+        _paradaMarkers = markers;
+        _paradasCarregadas = true;
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao buscar paradas do servidor')),
+      );
     }
   }
 
@@ -261,11 +295,13 @@ class _MapScreenState extends State<MapScreen> {
             ListTile(
               leading: Icon(Icons.location_on, color: Colors.green),
               title: Text('Paradas Próximas'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Funcionalidade em desenvolvimento')),
+                  SnackBar(content: Text('Carregando paradas...')),
                 );
+                await _mostrarParadasProximas();
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
               },
             ),
             ListTile(
@@ -310,6 +346,7 @@ class _MapScreenState extends State<MapScreen> {
                       onMapCreated: (controller) => _mapController = controller,
                       myLocationEnabled: true,
                       myLocationButtonEnabled: true,
+                      markers: _paradaMarkers,
                     ),
                     // BARRA DE PESQUISA
                     Positioned(
