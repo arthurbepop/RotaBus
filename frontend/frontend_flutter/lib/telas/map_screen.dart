@@ -341,7 +341,7 @@ class _MapScreenState extends State<MapScreen> {
                     GoogleMap(
                       initialCameraPosition: CameraPosition(
                         target: _currentPosition!,
-                        zoom: 15,
+                        zoom: 18, // Zoom maior para mais detalhes
                       ),
                       onMapCreated: (controller) => _mapController = controller,
                       myLocationEnabled: true,

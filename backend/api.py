@@ -26,13 +26,18 @@ def get_horarios(codigo):
 
 @app.route('/paradas', methods=['GET'])
 def get_all_paradas():
-    # Lê o arquivo tratado com as paradas e coordenadas
-    path = os.path.join(os.path.dirname(__file__), 'database', 'paradas_com_coords_tratadas.json')
-    with open(path, 'r', encoding='utf-8') as f:
-        paradas = json.load(f)
-    # Filtra apenas as que têm lat/lng
-    paradas = [p for p in paradas if p.get('lat') and p.get('lng')]
-    return jsonify(paradas)
+    # Busca direto do banco de dados
+    try:
+        with db.conn.cursor() as cur:
+            cur.execute('SELECT estacao, lat, lng FROM paradas_coords WHERE lat IS NOT NULL AND lng IS NOT NULL')
+            results = cur.fetchall()
+            paradas = [
+                {'estacao': row[0], 'lat': float(row[1]), 'lng': float(row[2])}
+                for row in results
+            ]
+        return jsonify(paradas)
+    except Exception as e:
+        return jsonify({'erro': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
