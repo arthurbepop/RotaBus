@@ -7,6 +7,9 @@ import 'detalhes_linha.dart';
 import '../servicos/api_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
+import '../componentes/menu_lateral_melhorado.dart';
+import 'package:intl/intl.dart';
 
 class MapScreen extends StatefulWidget {
   @override
@@ -22,9 +25,27 @@ class _MapScreenState extends State<MapScreen> {
   List<String> _linhasDisponiveis = [];
   List<String> _linhasFiltradas = [];
   bool _showSuggestions = false;
-  bool _isLoading = true;
   Set<Marker> _paradaMarkers = {};
-  bool _paradasCarregadas = false;
+  Set<Marker> _todasParadasMarkers = {}; // Guarda todos os marcadores
+  Marker? _selectedMarker;
+  List<dynamic> _proximasPartidas = [];
+
+  String _mapStyle = '''[
+  {
+    "featureType": "poi",
+    "elementType": "all",
+    "stylers": [
+      { "visibility": "off" }
+    ]
+  },
+  {
+    "featureType": "poi.bus_station",
+    "elementType": "all",
+    "stylers": [
+      { "visibility": "on" }
+    ]
+  }
+]''';
 
   @override
   void initState() {
@@ -39,11 +60,10 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _linhasDisponiveis = linhas.map((linha) => linha['nome'].toString()).toList();
         _linhasFiltradas = _linhasDisponiveis;
-        _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _isLoading = false;
+        
       });
     }
   }
@@ -102,9 +122,9 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // Carrega e mostra as paradas próximas
   Future<void> _mostrarParadasProximas() async {
-    if (_paradasCarregadas) return; // Só carrega uma vez
-    final url = Uri.parse('http://192.168.0.10:5000/paradas'); // Ajuste o IP se necessário
+    final url = Uri.parse('http://192.168.0.10:5000/paradas');
     final response = await http.get(url);
     if (response.statusCode == 200) {
       List<dynamic> paradas = json.decode(response.body);
@@ -116,20 +136,96 @@ class _MapScreenState extends State<MapScreen> {
               markerId: MarkerId(parada['estacao'] ?? parada['nome'] ?? ''),
               position: LatLng(parada['lat'], parada['lng']),
               infoWindow: InfoWindow(title: parada['estacao'] ?? parada['nome'] ?? ''),
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure), // azul claro
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+              onTap: () {
+                setState(() {
+                  _selectedMarker = Marker(
+                    markerId: MarkerId(parada['estacao'] ?? parada['nome'] ?? ''),
+                    position: LatLng(parada['lat'], parada['lng']),
+                    infoWindow: InfoWindow(title: parada['estacao'] ?? parada['nome'] ?? ''),
+                    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+                  );
+                  _paradaMarkers = {_selectedMarker!};
+                });
+                _mostrarBottomSheetProximasPartidas(
+                  parada['estacao'] ?? parada['nome'] ?? '',
+                );
+              },
             ),
           );
         }
       }
       setState(() {
         _paradaMarkers = markers;
-        _paradasCarregadas = true;
+        _todasParadasMarkers = markers;
+        _selectedMarker = null;
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao buscar paradas do servidor')),
       );
     }
+  }
+
+  void _restaurarTodasParadas() {
+    setState(() {
+      _paradaMarkers = _todasParadasMarkers;
+      _selectedMarker = null;
+    });
+  }
+
+  // Busca as próximas partidas para a parada e horário atual
+  Future<void> _buscarProximasPartidas(String estacao) async {
+    final agora = DateFormat('HH:mm').format(DateTime.now());
+    final url = Uri.parse('http://192.168.0.10:5000/paradas/' + Uri.encodeComponent(estacao) + '/proximas_partidas?hora=$agora');
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      setState(() {
+        _proximasPartidas = json.decode(response.body);
+      });
+    } else {
+      setState(() {
+        _proximasPartidas = [];
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao buscar próximas partidas')),
+      );
+    }
+  }
+
+  // Mostra o bottom sheet com as próximas partidas
+  void _mostrarBottomSheetProximasPartidas(String nomeParada) async {
+    await _buscarProximasPartidas(nomeParada);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              padding: EdgeInsets.all(16),
+              child: _proximasPartidas.isEmpty
+                  ? Center(child: Text('Nenhuma partida futura para esta parada.'))
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: _proximasPartidas.length,
+                      itemBuilder: (context, index) {
+                        final partida = _proximasPartidas[index];
+                        return ListTile(
+                          leading: Icon(Icons.directions_bus, color: Colors.blue),
+                          title: Text('Linha ${partida['linha']}'),
+                          subtitle: Text('Sentido: ${partida['sentido']}\nHorário: ${partida['horario']}'),
+                        );
+                      },
+                    ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      _restaurarTodasParadas();
+    });
   }
 
   @override
@@ -197,141 +293,7 @@ class _MapScreenState extends State<MapScreen> {
         ),
         toolbarHeight: 65, // Altura maior para visual mais moderno
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.blue[600]!,
-                    Colors.blue[700]!,
-                    Colors.blue[800]!,
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  // Ícone do app no drawer
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Icon(
-                      Icons.directions_bus,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                  SizedBox(height: 12),
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Rota',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'Bus',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            shadows: [
-                              Shadow(
-                                offset: Offset(1, 1),
-                                blurRadius: 2.0,
-                                color: Colors.black26,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Transporte Público - Santa Cruz do Sul',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            ListTile(
-              leading: Icon(Icons.directions_bus, color: Colors.blue),
-              title: Text('Linhas de Ônibus'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => TelaLinhasOnibus()),
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.location_on, color: Colors.green),
-              title: Text('Paradas Próximas'),
-              onTap: () async {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Carregando paradas...')),
-                );
-                await _mostrarParadasProximas();
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.schedule, color: Colors.orange),
-              title: Text('Horários'),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Funcionalidade em desenvolvimento')),
-                );
-              },
-            ),
-            Divider(),
-            ListTile(
-              leading: Icon(Icons.person, color: Colors.grey),
-              title: Text('Perfil'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.account_balance_wallet, color: Colors.grey),
-              title: Text('Saldo'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: MenuLateralMelhorado(),
       body: _erroLocalizacao != null
           ? Center(child: Text(_erroLocalizacao!, style: TextStyle(color: Colors.red, fontSize: 18)))
           : _currentPosition == null
@@ -343,7 +305,10 @@ class _MapScreenState extends State<MapScreen> {
                         target: _currentPosition!,
                         zoom: 18, // Zoom maior para mais detalhes
                       ),
-                      onMapCreated: (controller) => _mapController = controller,
+                      onMapCreated: (controller) {
+                        _mapController = controller;
+                        _mapController?.setMapStyle(_mapStyle);
+                      },
                       myLocationEnabled: true,
                       myLocationButtonEnabled: true,
                       markers: _paradaMarkers,

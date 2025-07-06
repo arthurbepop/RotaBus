@@ -16,6 +16,7 @@ dependencies:
   dio: ^5.3.2
   flutter_launcher_icons: ^0.14.4
   http: ^1.4.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
