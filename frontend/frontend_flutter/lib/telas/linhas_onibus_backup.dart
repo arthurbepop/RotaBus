@@ -101,28 +101,47 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
 
   void _filtrarLinhas(String busca) {
     setState(() {
-      final buscaTrim = busca.trim().toLowerCase();
-      if (buscaTrim.isEmpty) {
-        _gruposFiltrados = _gruposLinhas;
-        _mostrandoSugestoes = false;
-        _sugestoesLinhas = [];
+      if (busca.isEmpty) {
+        // Reset quando não há busca
         _linhaSelecionada = null;
         _sentidosRecomendados = [];
         _mostrandoRecomendacoes = false;
-        return;
+        _sugestoesLinhas = [];
+        _mostrandoSugestoes = false;
+        
+        // Resetar seleções dos grupos
+        for (var grupo in _gruposLinhas) {
+          grupo.isSelected = false;
+        }
+        
+        _gruposFiltrados = _filtroSelecionado == 'Todas' 
+            ? _gruposLinhas 
+            : _gruposLinhas.where((grupo) => 
+                grupo.sentidos.any((linha) => linha.sentido.contains(_filtroSelecionado))
+              ).toList();
+      } else {
+        // Filtrar grupos que correspondem à busca
+        final gruposFiltrados = _gruposLinhas.where((grupo) {
+          final correspondeTexto = grupo.nome.toLowerCase().contains(busca.toLowerCase()) ||
+                                  grupo.codigo.toLowerCase().contains(busca.toLowerCase());
+          final correspondeSentido = _filtroSelecionado == 'Todas' || 
+                                    grupo.sentidos.any((linha) => linha.sentido.contains(_filtroSelecionado));
+          return correspondeTexto && correspondeSentido;
+        }).toList();
+        
+        // Reset das seleções
+        _linhaSelecionada = null;
+        _sentidosRecomendados = [];
+        _mostrandoRecomendacoes = false;
+        _sugestoesLinhas = [];
+        _mostrandoSugestoes = false;
+        for (var grupo in _gruposLinhas) {
+          grupo.isSelected = false;
+        }
+        
+        // Mostrar resultados normalmente
+        _gruposFiltrados = gruposFiltrados;
       }
-      final buscaNormalizada = buscaTrim.replaceAll(RegExp(r'[^a-z0-9 ]'), '');
-      final filtrados = _gruposLinhas.where((grupo) {
-        final nomeNormalizado = grupo.nome.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
-        final codigoNormalizado = grupo.codigo.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
-        return nomeNormalizado.contains(buscaNormalizada) || codigoNormalizado.contains(buscaNormalizada);
-      }).toList();
-      _gruposFiltrados = filtrados;
-      _mostrandoSugestoes = false;
-      _sugestoesLinhas = [];
-      _linhaSelecionada = null;
-      _sentidosRecomendados = [];
-      _mostrandoRecomendacoes = false;
     });
   }
 
@@ -202,27 +221,23 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
     }
   }
 
-  void _selecionarLinhaSugerida(GrupoLinha grupo, {String? sentido}) {
+  void _selecionarLinhaSugerida(GrupoLinha grupo) {
     setState(() {
       _searchController.text = grupo.nome;
-      _linhaSelecionada = grupo;
-      _sentidosRecomendados = grupo.sentidos.map((s) => s.sentido).toList();
-      _mostrandoRecomendacoes = true;
+      _linhaSelecionada = null;
+      _sentidosRecomendados = [];
+      _mostrandoRecomendacoes = false;
       _sugestoesLinhas = [];
       _mostrandoSugestoes = false;
+      
+      // Filtrar apenas o grupo selecionado
+      _gruposFiltrados = [grupo];
     });
-    if (sentido != null) {
-      // Garante que as paradas estejam carregadas antes de navegar
-      _carregarParadas(grupo, sentido).then((_) {
-        _navegarParaMapa(grupo, sentido);
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: Text('Linhas de Ônibus'),
         backgroundColor: Colors.transparent,
@@ -245,10 +260,17 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
           ),
         ],
       ),
-      body: SafeArea(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue[50]!, Colors.white],
+          ),
+        ),
         child: Column(
           children: [
-            // Cabeçalho com busca, filtros, sugestões, recomendações
+            // Cabeçalho com busca e filtros
             Container(
               padding: EdgeInsets.all(16),
               child: Column(
@@ -269,7 +291,7 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Digite a linha ou sentido (ex: linha 01, bom jesus)',
+                        hintText: 'Digite a linha ou sentido (ex: 1 Bom Jesus)',
                         prefixIcon: Icon(Icons.search, color: Colors.blue),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -286,7 +308,9 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                       onChanged: _filtrarLinhas,
                     ),
                   ),
-
+                  
+                  SizedBox(height: 12),
+                  
                   // Recomendações de sentidos (aparecem quando uma linha é selecionada)
                   if (_mostrandoRecomendacoes && _sentidosRecomendados.isNotEmpty)
                     Container(
@@ -358,72 +382,146 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                       ),
                     ),
                   
-                  // Filtro de sentido melhorado
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8),
-                    child: Row(
-                      children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.blue,
-                            elevation: 1,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(color: Colors.blue[100]!),
-                            ),
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  // Sugestões de linhas (aparecem quando há múltiplas correspondências)
+                  if (_mostrandoSugestoes && _sugestoesLinhas.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.grey[300]!),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
                           ),
-                          icon: Icon(Icons.filter_alt, color: Colors.blue[700]),
-                          label: Text(
-                            _filtroSelecionado == 'Todas'
-                                ? 'Filtrar sentido'
-                                : 'Sentido: $_filtroSelecionado',
-                            style: TextStyle(
-                              color: Colors.blue[800],
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          onPressed: () async {
-                            final sentidos = _obterSentidosUnicos();
-                            final selecionado = await showModalBottomSheet<String>(
-                              context: context,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                              ),
-                              builder: (context) {
-                                return SafeArea(
-                                  child: ListView(
-                                    shrinkWrap: true,
-                                    children: sentidos.map((sentido) {
-                                      return ListTile(
-                                        leading: Icon(
-                                          sentido == 'Todas' ? Icons.all_inclusive : Icons.alt_route,
-                                          color: sentido == _filtroSelecionado ? Colors.blue : Colors.grey[600],
-                                        ),
-                                        title: Text(sentido),
-                                        selected: sentido == _filtroSelecionado,
-                                        onTap: () => Navigator.pop(context, sentido),
-                                      );
-                                    }).toList(),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Icon(Icons.list_alt, color: Colors.grey[600], size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Linhas encontradas:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
                                   ),
-                                );
-                              },
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Lista simplificada de sugestões
+                          ..._sugestoesLinhas.map((grupo) {
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _selecionarLinhaSugerida(grupo),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      top: BorderSide(color: Colors.grey[200]!),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[100],
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          grupo.codigo,
+                                          style: TextStyle(
+                                            color: Colors.blue[800],
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          grupo.nome,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                            color: Colors.grey[800],
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.arrow_forward_ios,
+                                        color: Colors.grey[400],
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             );
-                            if (selecionado != null) {
-                              _aplicarFiltroSentido(selecionado);
-                            }
-                          },
-                        ),
-                        Spacer(),
-                      ],
+                          }).toList(),
+                        ],
+                      ),
                     ),
-                  ),
+                      ),
+                    ),
+                  
+                  // Filtros por sentido (só aparecem quando não há recomendações nem sugestões)
+                  if (_todasLinhas.isNotEmpty && !_mostrandoRecomendacoes && !_mostrandoSugestoes)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _obterSentidosUnicos().map((sentido) {
+                          final isSelected = _filtroSelecionado == sentido;
+                          return Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(sentido),
+                              selected: isSelected,
+                              onSelected: (_) => _aplicarFiltroSentido(sentido),
+                              backgroundColor: Colors.white,
+                              selectedColor: Colors.blue[100],
+                              checkmarkColor: Colors.blue,
+                              elevation: 2,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
                 ],
               ),
             ),
-            // Lista de linhas (expandida)
+            
+            // Contador de resultados
+            if (!_isLoading && !_mostrandoSugestoes && !_mostrandoRecomendacoes)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                    SizedBox(width: 4),
+                    Text(
+                      '${_gruposFiltrados.length} linha(s) encontrada(s)',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            
+            SizedBox(height: 8),
+            
+            // Lista de linhas
             Expanded(
               child: _buildCorpoLista(),
             ),
@@ -436,17 +534,45 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
   Widget _buildCorpoLista() {
     if (_isLoading) {
       return Center(
-        child: CircularProgressIndicator(color: Colors.blue),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.blue),
+            SizedBox(height: 16),
+            Text('Carregando linhas...', style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
       );
     }
 
     // Se está mostrando sugestões ou recomendações, não mostrar a lista de grupos
     if (_mostrandoSugestoes || _mostrandoRecomendacoes) {
-      return SizedBox.shrink(); // Simplesmente não mostra nada
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Colors.grey[300],
+            ),
+            SizedBox(height: 16),
+            Text(
+              _mostrandoRecomendacoes 
+                  ? 'Escolha um sentido acima'
+                  : 'Selecione uma linha acima',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     if (_gruposFiltrados.isEmpty) {
-      return Center(child: Text('Nenhuma linha encontrada.', style: TextStyle(color: Colors.grey)));
+      return _buildEstadoVazio();
     }
 
     return AnimatedBuilder(
@@ -467,6 +593,7 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                 ),
               ),
             );
+            
             return SlideTransition(
               position: Tween<Offset>(
                 begin: Offset(1, 0),
@@ -492,6 +619,7 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
       [Colors.teal, Colors.teal[700]!],
     ];
     final corIndex = index % cores.length;
+    
     return Container(
       margin: EdgeInsets.only(bottom: 12),
       child: Card(
