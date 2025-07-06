@@ -269,7 +269,7 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: 'Digite a linha ou sentido (ex: linha 01, bom jesus)',
+                        hintText: 'Digite a linha: (ex: linha 01)',
                         prefixIcon: Icon(Icons.search, color: Colors.blue),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -357,69 +357,6 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProvider
                         ],
                       ),
                     ),
-                  
-                  // Filtro de sentido melhorado
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8),
-                    child: Row(
-                      children: [
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.blue,
-                            elevation: 1,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              side: BorderSide(color: Colors.blue[100]!),
-                            ),
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          ),
-                          icon: Icon(Icons.filter_alt, color: Colors.blue[700]),
-                          label: Text(
-                            _filtroSelecionado == 'Todas'
-                                ? 'Filtrar sentido'
-                                : 'Sentido: $_filtroSelecionado',
-                            style: TextStyle(
-                              color: Colors.blue[800],
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          onPressed: () async {
-                            final sentidos = _obterSentidosUnicos();
-                            final selecionado = await showModalBottomSheet<String>(
-                              context: context,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                              ),
-                              builder: (context) {
-                                return SafeArea(
-                                  child: ListView(
-                                    shrinkWrap: true,
-                                    children: sentidos.map((sentido) {
-                                      return ListTile(
-                                        leading: Icon(
-                                          sentido == 'Todas' ? Icons.all_inclusive : Icons.alt_route,
-                                          color: sentido == _filtroSelecionado ? Colors.blue : Colors.grey[600],
-                                        ),
-                                        title: Text(sentido),
-                                        selected: sentido == _filtroSelecionado,
-                                        onTap: () => Navigator.pop(context, sentido),
-                                      );
-                                    }).toList(),
-                                  ),
-                                );
-                              },
-                            );
-                            if (selecionado != null) {
-                              _aplicarFiltroSentido(selecionado);
-                            }
-                          },
-                        ),
-                        Spacer(),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
