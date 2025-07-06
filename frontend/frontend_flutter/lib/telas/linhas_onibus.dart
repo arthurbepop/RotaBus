@@ -1,22 +1,248 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../modelos/linha.dart';
 import '../servicos/api_linhas.dart';
-import 'detalhes_linha.dart';
+import 'map_screen.dart';
+
+class GrupoLinha {
+  final String nome;
+  final String codigo;
+  final List<Linha> sentidos;
+  bool isSelected;
+  Map<String, List<dynamic>> paradasCarregadas;
+
+  GrupoLinha({
+    required this.nome,
+    required this.codigo,
+    required this.sentidos,
+    this.isSelected = false,
+  }) : paradasCarregadas = {};
+}
 
 class TelaLinhasOnibus extends StatefulWidget {
   @override
   _TelaLinhasOnibusState createState() => _TelaLinhasOnibusState();
 }
 
-class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
+class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> with TickerProviderStateMixin {
   final ApiLinhas _apiLinhas = ApiLinhas();
+  final TextEditingController _searchController = TextEditingController();
+  List<Linha> _todasLinhas = [];
+  List<GrupoLinha> _gruposLinhas = [];
+  List<GrupoLinha> _gruposFiltrados = [];
+  bool _isLoading = true;
+  String _filtroSelecionado = 'Todas';
+  late AnimationController _animationController;
+  
+  // Variáveis para controle da barra de pesquisa
+  GrupoLinha? _linhaSelecionada;
+  List<String> _sentidosRecomendados = [];
+  bool _mostrandoRecomendacoes = false;
+  
+  // Novas variáveis para sugestões de pesquisa
+  List<GrupoLinha> _sugestoesLinhas = [];
+  bool _mostrandoSugestoes = false;
 
-  Future<List<Linha>> _carregarLinhas() async {
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _carregarLinhas();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _carregarLinhas() async {
+    setState(() => _isLoading = true);
+    
     try {
-      return await _apiLinhas.obterLinhas();
+      final linhas = await _apiLinhas.obterLinhas();
+      setState(() {
+        _todasLinhas = linhas;
+        _gruposLinhas = _agruparLinhas(linhas);
+        _gruposFiltrados = _gruposLinhas;
+        _isLoading = false;
+      });
+      _animationController.forward();
     } catch (e) {
-      print('Erro ao carregar linhas: $e');
-      return [];
+      setState(() => _isLoading = false);
+      _mostrarSnackBar('Erro ao carregar linhas: $e', Colors.red);
+    }
+  }
+
+  List<GrupoLinha> _agruparLinhas(List<Linha> linhas) {
+    final Map<String, List<Linha>> grupos = {};
+    
+    for (var linha in linhas) {
+      final nomeBase = linha.nome.replaceAll(RegExp(r'\s*-.*'), '').trim();
+      if (!grupos.containsKey(nomeBase)) {
+        grupos[nomeBase] = [];
+      }
+      grupos[nomeBase]!.add(linha);
+    }
+    
+    return grupos.entries.map((entry) {
+      final codigo = entry.value.first.id;
+      return GrupoLinha(
+        nome: entry.key,
+        codigo: codigo,
+        sentidos: entry.value,
+      );
+    }).toList();
+  }
+
+  void _filtrarLinhas(String busca) {
+    setState(() {
+      if (busca.isEmpty) {
+        // Reset quando não há busca
+        _linhaSelecionada = null;
+        _sentidosRecomendados = [];
+        _mostrandoRecomendacoes = false;
+        _sugestoesLinhas = [];
+        _mostrandoSugestoes = false;
+        
+        _gruposFiltrados = _filtroSelecionado == 'Todas' 
+            ? _gruposLinhas 
+            : _gruposLinhas.where((grupo) => 
+                grupo.sentidos.any((linha) => linha.sentido.contains(_filtroSelecionado))
+              ).toList();
+      } else {
+        // Filtrar grupos que correspondem à busca
+        final gruposFiltrados = _gruposLinhas.where((grupo) {
+          final correspondeTexto = grupo.nome.toLowerCase().contains(busca.toLowerCase()) ||
+                                  grupo.codigo.toLowerCase().contains(busca.toLowerCase());
+          final correspondeSentido = _filtroSelecionado == 'Todas' || 
+                                    grupo.sentidos.any((linha) => linha.sentido.contains(_filtroSelecionado));
+          return correspondeTexto && correspondeSentido;
+        }).toList();
+        
+        if (gruposFiltrados.length == 1) {
+          // Se há apenas uma linha correspondente, mostrar recomendações de sentidos
+          _linhaSelecionada = gruposFiltrados.first;
+          _sentidosRecomendados = _linhaSelecionada!.sentidos.map((s) => s.sentido).toList();
+          _mostrandoRecomendacoes = true;
+          _sugestoesLinhas = [];
+          _mostrandoSugestoes = false;
+          _gruposFiltrados = [];
+        } else if (gruposFiltrados.length > 1) {
+          // Se há múltiplas correspondências, mostrar sugestões de linhas
+          _linhaSelecionada = null;
+          _sentidosRecomendados = [];
+          _mostrandoRecomendacoes = false;
+          _sugestoesLinhas = gruposFiltrados.take(5).toList(); // Limitar a 5 sugestões
+          _mostrandoSugestoes = true;
+          _gruposFiltrados = [];
+        } else {
+          // Nenhuma correspondência
+          _linhaSelecionada = null;
+          _sentidosRecomendados = [];
+          _mostrandoRecomendacoes = false;
+          _sugestoesLinhas = [];
+          _mostrandoSugestoes = false;
+          _gruposFiltrados = [];
+        }
+      }
+    });
+  }
+
+  void _aplicarFiltroSentido(String filtro) {
+    setState(() {
+      _filtroSelecionado = filtro;
+    });
+    _filtrarLinhas(_searchController.text);
+  }
+
+  Future<void> _carregarParadas(GrupoLinha grupo, String sentido) async {
+    if (grupo.paradasCarregadas.containsKey(sentido)) {
+      return; // Já carregadas
+    }
+
+    try {
+      final paradas = await _apiLinhas.obterParadas(grupo.codigo);
+      setState(() {
+        grupo.paradasCarregadas[sentido] = paradas;
+      });
+    } catch (e) {
+      print('Erro ao carregar paradas: $e');
+      setState(() {
+        grupo.paradasCarregadas[sentido] = [];
+      });
+    }
+  }
+
+  void _navegarParaMapa(GrupoLinha grupo, String sentido) {
+    HapticFeedback.mediumImpact();
+    final paradas = grupo.paradasCarregadas[sentido] ?? [];
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MapScreen(
+          paradasDestacadas: paradas,
+          tituloLinha: '${grupo.nome} - $sentido',
+        ),
+      ),
+    );
+  }
+
+  void _mostrarSnackBar(String mensagem, Color cor) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensagem),
+        backgroundColor: cor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  List<String> _obterSentidosUnicos() {
+    final sentidos = _todasLinhas.map((l) => l.sentido).where((s) => s.isNotEmpty).toSet().toList();
+    sentidos.sort();
+    return ['Todas', ...sentidos];
+  }
+
+  void _selecionarSentidoRecomendado(String sentido) async {
+    if (_linhaSelecionada != null) {
+      HapticFeedback.lightImpact();
+      
+      // Carregar paradas e navegar para o mapa
+      await _carregarParadas(_linhaSelecionada!, sentido);
+      _navegarParaMapa(_linhaSelecionada!, sentido);
+      
+      // Limpar busca e recomendações
+      _searchController.clear();
+      setState(() {
+        _linhaSelecionada = null;
+        _sentidosRecomendados = [];
+        _mostrandoRecomendacoes = false;
+      });
+      _filtrarLinhas('');
+    }
+  }
+
+  void _selecionarLinhaSugerida(GrupoLinha grupo, {String? sentido}) {
+    setState(() {
+      _searchController.text = grupo.nome;
+      _linhaSelecionada = grupo;
+      _sentidosRecomendados = grupo.sentidos.map((s) => s.sentido).toList();
+      _mostrandoRecomendacoes = true;
+      _sugestoesLinhas = [];
+      _mostrandoSugestoes = false;
+    });
+    if (sentido != null) {
+      // Garante que as paradas estejam carregadas antes de navegar
+      _carregarParadas(grupo, sentido).then((_) {
+        _navegarParaMapa(grupo, sentido);
+      });
     }
   }
 
@@ -25,48 +251,702 @@ class _TelaLinhasOnibusState extends State<TelaLinhasOnibus> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Linhas de Ônibus'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.blue[600]!, Colors.blue[700]!, Colors.blue[800]!],
+            ),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _carregarLinhas,
+            tooltip: 'Atualizar linhas',
+          ),
+        ],
       ),
-      body: FutureBuilder<List<Linha>>(
-        future: _carregarLinhas(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Erro ao carregar linhas'));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('Nenhuma linha encontrada'));
-          }
-
-          final listaLinhas = snapshot.data!;
-          return ListView.builder(
-            itemCount: listaLinhas.length,
-            itemBuilder: (context, index) {
-              final linha = listaLinhas[index];
-              return ListTile(
-                leading: Icon(Icons.directions_bus),
-                title: Text(linha.nome),
-                subtitle: Text('Sentido: ${linha.sentido}'),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TelaDetalhesLinha(linha: linha),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue[50]!, Colors.white],
+          ),
+        ),
+        child: Column(
+          children: [
+            // Cabeçalho com busca e filtros
+            Container(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  // Campo de busca
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(25),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 10,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  );
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Digite a linha ou sentido (ex: 1 Bom Jesus)',
+                        prefixIcon: Icon(Icons.search, color: Colors.blue),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.clear),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _filtrarLinhas('');
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+                      ),
+                      onChanged: _filtrarLinhas,
+                    ),
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Recomendações de sentidos (aparecem quando uma linha é selecionada)
+                  if (_mostrandoRecomendacoes && _sentidosRecomendados.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(bottom: 12),
+                      padding: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.blue[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.directions_bus, color: Colors.blue[600], size: 18),
+                              SizedBox(width: 8),
+                              Text(
+                                'Sentidos da ${_linhaSelecionada?.nome}:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue[800],
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _sentidosRecomendados.map((sentido) {
+                              return GestureDetector(
+                                onTap: () => _selecionarSentidoRecomendado(sentido),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue[600],
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.3),
+                                        blurRadius: 4,
+                                        offset: Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.arrow_forward, color: Colors.white, size: 16),
+                                      SizedBox(width: 6),
+                                      Text(
+                                        sentido,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  
+                  // Sugestões de linhas (aparecem quando há múltiplas correspondências)
+                  if (_mostrandoSugestoes && _sugestoesLinhas.isNotEmpty)
+                    Container(
+                      width: double.infinity,
+                      margin: EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.grey[300]!),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Row(
+                              children: [
+                                Icon(Icons.list_alt, color: Colors.grey[600], size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Linhas encontradas:',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey[700],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Lista de sugestões por sentido
+                          // Expandir sugestões para mostrar cada sentido
+                          ..._sugestoesLinhas.expand((grupo) => grupo.sentidos.map((linha) {
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _selecionarLinhaSugerida(grupo, sentido: linha.sentido),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      top: BorderSide(color: Colors.grey[200]!),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue[100],
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          grupo.codigo,
+                                          style: TextStyle(
+                                            color: Colors.blue[800],
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              grupo.nome,
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey[800],
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                            Text(
+                                              linha.sentido,
+                                              style: TextStyle(
+                                                color: Colors.indigo[600],
+                                                fontSize: 13,
+                                                fontStyle: FontStyle.italic,
+                                                fontWeight: FontWeight.w400,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Icon(
+                                        Icons.arrow_forward_ios,
+                                        color: Colors.grey[400],
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          })).toList(),
+                        ],
+                      ),
+                    ),
+                  
+                  // Filtros por sentido (só aparecem quando não há recomendações nem sugestões)
+                  if (_todasLinhas.isNotEmpty && !_mostrandoRecomendacoes && !_mostrandoSugestoes)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: _obterSentidosUnicos().map((sentido) {
+                          final isSelected = _filtroSelecionado == sentido;
+                          return Padding(
+                            padding: EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(sentido),
+                              selected: isSelected,
+                              onSelected: (_) => _aplicarFiltroSentido(sentido),
+                              backgroundColor: Colors.white,
+                              selectedColor: Colors.blue[100],
+                              checkmarkColor: Colors.blue,
+                              elevation: 2,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            
+            // Contador de resultados
+            if (!_isLoading && !_mostrandoSugestoes && !_mostrandoRecomendacoes)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                    SizedBox(width: 4),
+                    Text(
+                      '${_gruposFiltrados.length} linha(s) encontrada(s)',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            
+            SizedBox(height: 8),
+            
+            // Lista de linhas
+            Expanded(
+              child: _buildCorpoLista(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCorpoLista() {
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.blue),
+            SizedBox(height: 16),
+            Text('Carregando linhas...', style: TextStyle(color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    // Se está mostrando sugestões ou recomendações, não mostrar a lista de grupos
+    if (_mostrandoSugestoes || _mostrandoRecomendacoes) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search,
+              size: 64,
+              color: Colors.grey[300],
+            ),
+            SizedBox(height: 16),
+            Text(
+              _mostrandoRecomendacoes 
+                  ? 'Escolha um sentido acima'
+                  : 'Selecione uma linha acima',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_gruposFiltrados.isEmpty) {
+      return _buildEstadoVazio();
+    }
+
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return ListView.builder(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _gruposFiltrados.length,
+          itemBuilder: (context, index) {
+            final grupo = _gruposFiltrados[index];
+            final animation = Tween<double>(begin: 0.0, end: 1.0).animate(
+              CurvedAnimation(
+                parent: _animationController,
+                curve: Interval(
+                  index * 0.1,
+                  1.0,
+                  curve: Curves.easeOutBack,
+                ),
+              ),
+            );
+            
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: Offset(1, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: FadeTransition(
+                opacity: animation,
+                child: _buildCardGrupoLinha(grupo, index),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCardGrupoLinha(GrupoLinha grupo, int index) {
+    final cores = [
+      [Colors.blue, Colors.blue[700]!],
+      [Colors.green, Colors.green[700]!], 
+      [Colors.orange, Colors.orange[700]!],
+      [Colors.purple, Colors.purple[700]!],
+      [Colors.teal, Colors.teal[700]!],
+    ];
+    final corIndex = index % cores.length;
+    
+    return Container(
+      margin: EdgeInsets.only(bottom: 12),
+      child: Card(
+        elevation: grupo.isSelected ? 4 : 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: grupo.isSelected ? Colors.blue[50] : Colors.white,
+        child: Column(
+          children: [
+            // Header da linha principal
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  setState(() {
+                    // Se a linha já está selecionada, deseleciona
+                    if (_linhaSelecionada == grupo) {
+                      _linhaSelecionada = null;
+                      grupo.isSelected = false;
+                    } else {
+                      // Deseleciona a linha anterior
+                      if (_linhaSelecionada != null) {
+                        _linhaSelecionada!.isSelected = false;
+                      }
+                      // Seleciona a nova linha
+                      _linhaSelecionada = grupo;
+                      grupo.isSelected = true;
+                    }
+                  });
                 },
-              );
-            },
-          );
-        },
+                child: Container(
+                  padding: EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      // Ícone colorido
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: cores[corIndex],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: cores[corIndex][0].withOpacity(0.3),
+                              blurRadius: 6,
+                              offset: Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.directions_bus,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      
+                      SizedBox(width: 16),
+                      
+                      // Informações da linha
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              grupo.nome,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[800],
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              '${grupo.sentidos.length} sentido(s) disponível(is)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Código: ${grupo.codigo}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Ícone indicativo
+                      AnimatedSwitcher(
+                        duration: Duration(milliseconds: 200),
+                        child: grupo.isSelected
+                            ? Icon(
+                                Icons.touch_app,
+                                color: Colors.blue[600],
+                                size: 24,
+                                key: ValueKey('selected'),
+                              )
+                            : Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.grey[600],
+                                size: 18,
+                                key: ValueKey('unselected'),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
+            // Recomendações de sentidos (mostrado quando selecionado)
+            AnimatedCrossFade(
+              firstChild: Container(),
+              secondChild: _buildRecomendacoesSentidos(grupo, cores[corIndex]),
+              crossFadeState: grupo.isSelected 
+                  ? CrossFadeState.showSecond 
+                  : CrossFadeState.showFirst,
+              duration: Duration(milliseconds: 300),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecomendacoesSentidos(GrupoLinha grupo, List<Color> cores) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Divisor
+          Container(
+            height: 1,
+            margin: EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.grey[300]!,
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+          
+          // Título das recomendações
+          Row(
+            children: [
+              Icon(
+                Icons.recommend,
+                color: Colors.blue[600],
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Escolha um sentido:',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[700],
+                ),
+              ),
+            ],
+          ),
+          
+          SizedBox(height: 12),
+          
+          // Lista de sentidos como recomendações
+          ...grupo.sentidos.map((linha) {
+            final sentido = linha.sentido;
+            
+            return Container(
+              margin: EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () async {
+                    HapticFeedback.mediumImpact();
+                    
+                    // Carregar paradas e navegar para o mapa
+                    await _carregarParadas(grupo, sentido);
+                    _navegarParaMapa(grupo, sentido);
+                  },
+                  child: Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[25],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.blue[200]!,
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Indicador de sentido
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: cores[1],
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        
+                        SizedBox(width: 12),
+                        
+                        // Nome do sentido
+                        Expanded(
+                          child: Text(
+                            sentido.isNotEmpty ? sentido : 'Sentido não informado',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ),
+                        
+                        // Botão do mapa
+                        Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.map,
+                            color: Colors.blue[700],
+                            size: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEstadoVazio() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.search_off,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          SizedBox(height: 16),
+          Text(
+            _searchController.text.isNotEmpty 
+                ? 'Nenhuma linha encontrada'
+                : 'Nenhuma linha disponível',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            _searchController.text.isNotEmpty
+                ? 'Tente alterar os termos de busca'
+                : 'Verifique sua conexão e tente novamente',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _carregarLinhas,
+            icon: Icon(Icons.refresh),
+            label: Text('Tentar Novamente'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-// Esta tela exibe uma lista de linhas de ônibus.
-// Ela utiliza o FutureBuilder para lidar com a chamada assíncrona da API.
-// Quando os dados estão sendo carregados, exibe um CircularProgressIndicator.
-// Se ocorrer um erro, exibe uma mensagem de erro.
-// Se não houver dados, exibe uma mensagem informando que nenhuma linha foi encontrada.
-// A lista de linhas é exibida em um ListView, onde cada item é um ListTile com um ícone de ônibus e o nome da linha.
-// O código é organizado para ser fácil de entender e manter, seguindo boas práticas de desenvolvimento Flutter.
-// A tela foi atualizada para exibir o sentido da linha e navegar para uma tela de detalhes ao selecionar uma linha.

@@ -152,9 +152,9 @@ class PostgresDB:
                 # Busca linhas e sentidos únicos das tabelas de horários
                 cur.execute("""
                     SELECT DISTINCT 
-                        SUBSTRING(table_name FROM 'horarios_([^_]+)_([^_]+)') as codigo,
-                        SUBSTRING(table_name FROM 'horarios_([^_]+)_([^_]+)') as nome,
-                        SUBSTRING(table_name FROM 'horarios_[^_]+_([^_]+)') as sentido
+                        SUBSTRING(table_name FROM 'horarios_([^_]+)_.*') as codigo,
+                        SUBSTRING(table_name FROM 'horarios_([^_]+)_.*') as nome,
+                        SUBSTRING(table_name FROM 'horarios_[^_]+_(.*)') as sentido
                     FROM information_schema.tables 
                     WHERE table_name LIKE 'horarios_%'
                     AND table_schema = 'public'
@@ -165,7 +165,7 @@ class PostgresDB:
                     {
                         'id': row['codigo'],
                         'nome': f"Linha {row['codigo']}",
-                        'sentido': row['sentido']
+                        'sentido': row['sentido'].replace('_', ' ') if row['sentido'] else ''
                     } for row in results
                 ]
         except Exception as e:
@@ -173,7 +173,7 @@ class PostgresDB:
             return []
 
     def get_paradas(self, codigo):
-        """Retorna paradas de uma linha específica (todos os sentidos)"""
+        """Retorna paradas de uma linha específica (todos os sentidos) com coordenadas"""
         try:
             with self.conn.cursor(row_factory=dict_row) as cur:
                 # Busca todas as tabelas de horários dessa linha
@@ -182,12 +182,38 @@ class PostgresDB:
                     WHERE table_name LIKE %s AND table_schema = 'public'
                 """, (f'horarios_{codigo}_%',))
                 tables = cur.fetchall()
-                paradas = set()
+                paradas_nomes = set()
+                
+                # Coleta todos os nomes únicos de estações
                 for table in tables:
-                    cur.execute(f'SELECT DISTINCT estacao FROM {table["table_name"]} WHERE estacao IS NOT NULL')
-                    for row in cur.fetchall():
-                        paradas.add(row['estacao'])
-                return [{'nome': nome} for nome in sorted(paradas)]
+                    table_name = table["table_name"]
+                    cur.execute(f'SELECT DISTINCT estacao FROM {table_name} WHERE estacao IS NOT NULL AND estacao != \'\'')
+                    rows = cur.fetchall()
+                    for row in rows:
+                        estacao = row['estacao']
+                        # Filtrar entradas que não são nomes de estações válidos (como horários)
+                        if estacao and len(estacao) > 3 and not estacao.replace(':', '').replace('-', '').isdigit():
+                            paradas_nomes.add(estacao)
+                
+                # Busca coordenadas para cada parada
+                paradas_com_coords = []
+                for nome in sorted(paradas_nomes):
+                    cur.execute("""
+                        SELECT estacao, lat, lng FROM paradas_coords 
+                        WHERE estacao = %s AND lat IS NOT NULL AND lng IS NOT NULL
+                    """, (nome,))
+                    coord_result = cur.fetchone()
+                    if coord_result:
+                        paradas_com_coords.append({
+                            'nome': coord_result['estacao'],
+                            'lat': float(coord_result['lat']),
+                            'lng': float(coord_result['lng'])
+                        })
+                    else:
+                        # Se não tem coordenadas, inclui só o nome
+                        paradas_com_coords.append({'nome': nome})
+                
+                return paradas_com_coords
         except Exception as e:
             print(f"Erro ao buscar paradas: {e}")
             return []
@@ -203,7 +229,9 @@ class PostgresDB:
                 tables = cur.fetchall()
                 all_horarios = []
                 for table in tables:
-                    sentido = table['table_name'].split('_')[-1]
+                    # Extrair sentido completo: tudo após 'horarios_CODIGO_'
+                    table_name = table['table_name']
+                    sentido = '_'.join(table_name.split('_')[2:])  # Pega tudo após os dois primeiros underscores
                     cur.execute(f'SELECT * FROM {table["table_name"]}')
                     rows = cur.fetchall()
                     for row in rows:

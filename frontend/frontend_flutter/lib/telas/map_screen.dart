@@ -3,18 +3,25 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'dart:async';
-import 'linhas_onibus.dart';
+import 'dart:math' as math;
 import 'detalhes_linha.dart';
 import '../servicos/api_service.dart';
 import '../componentes/menu_lateral_melhorado.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter/services.dart';
-import '../componentes/menu_lateral_melhorado.dart';
 import 'package:intl/intl.dart';
 import '../modelos/linha.dart';
 
 class MapScreen extends StatefulWidget {
+  final List<dynamic>? paradasDestacadas;
+  final String? tituloLinha;
+  
+  const MapScreen({
+    Key? key,
+    this.paradasDestacadas,
+    this.tituloLinha,
+  }) : super(key: key);
+
   @override
   _MapScreenState createState() => _MapScreenState();
 }
@@ -181,6 +188,99 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
+  // Mostra paradas específicas destacadas no mapa
+  void _mostrarParadasDestacadas() {
+    if (widget.paradasDestacadas == null) return;
+    
+    Set<Marker> markers = {};
+    for (var parada in widget.paradasDestacadas!) {
+      // Verificar diferentes possíveis formatos de coordenadas
+      double? lat, lng;
+      String nome = '';
+      
+      if (parada['lat'] != null && parada['lng'] != null) {
+        lat = parada['lat'] is String ? double.tryParse(parada['lat']) : parada['lat']?.toDouble();
+        lng = parada['lng'] is String ? double.tryParse(parada['lng']) : parada['lng']?.toDouble();
+        nome = parada['nome'] ?? parada['estacao'] ?? parada['endereco'] ?? '';
+      } else if (parada['latitude'] != null && parada['longitude'] != null) {
+        lat = parada['latitude'] is String ? double.tryParse(parada['latitude']) : parada['latitude']?.toDouble();
+        lng = parada['longitude'] is String ? double.tryParse(parada['longitude']) : parada['longitude']?.toDouble();
+        nome = parada['nome'] ?? parada['estacao'] ?? parada['endereco'] ?? '';
+      }
+      
+      if (lat != null && lng != null && nome.isNotEmpty) {
+        final markerId = MarkerId('destaque_$nome');
+        final position = LatLng(lat, lng);
+        final marker = Marker(
+          markerId: markerId,
+          position: position,
+          infoWindow: InfoWindow(
+            title: nome,
+            snippet: widget.tituloLinha ?? 'Parada da linha',
+          ),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue), // Azul para destacar
+          onTap: () {
+            final clickedMarker = Marker(
+              markerId: markerId,
+              position: position,
+              infoWindow: InfoWindow(
+                title: nome,
+                snippet: widget.tituloLinha ?? 'Parada da linha',
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed), // Vermelho quando selecionado
+            );
+            setState(() {
+              _selectedMarker = clickedMarker;
+              _paradaMarkers = {clickedMarker};
+            });
+            
+            // Opcional: Mostrar próximas partidas se disponível
+            _mostrarBottomSheetProximasPartidas(nome);
+          },
+        );
+        markers.add(marker);
+      }
+    }
+    
+    setState(() {
+      _paradaMarkers = markers;
+      _todasParadasMarkers = markers;
+      _selectedMarker = null;
+    });
+    
+    // Ajustar zoom para mostrar todas as paradas destacadas
+    if (markers.isNotEmpty && _mapController != null) {
+      _ajustarZoomParaParadas(markers);
+    }
+  }
+
+  // Ajusta o zoom do mapa para mostrar todas as paradas
+  void _ajustarZoomParaParadas(Set<Marker> markers) {
+    if (markers.isEmpty) return;
+    
+    double minLat = double.infinity;
+    double maxLat = -double.infinity;
+    double minLng = double.infinity;
+    double maxLng = -double.infinity;
+    
+    for (var marker in markers) {
+      minLat = math.min(minLat, marker.position.latitude);
+      maxLat = math.max(maxLat, marker.position.latitude);
+      minLng = math.min(minLng, marker.position.longitude);
+      maxLng = math.max(maxLng, marker.position.longitude);
+    }
+    
+    _mapController?.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        100.0, // padding
+      ),
+    );
+  }
+
   // Busca as próximas partidas para a parada e horário atual
   Future<void> _buscarProximasPartidas(String estacao) async {
     final agora = DateFormat('HH:mm').format(DateTime.now());
@@ -239,37 +339,76 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: RichText(
-          text: TextSpan(
-            children: [
-              TextSpan(
-                text: 'Rota',
-                style: TextStyle(
-                  fontWeight: FontWeight.w300, // Mais leve
-                  fontSize: 22,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              TextSpan(
-                text: 'Bus',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700, // Mais pesado para contraste
-                  fontSize: 22,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                  shadows: [
-                    Shadow(
-                      offset: Offset(1, 1),
-                      blurRadius: 3.0,
-                      color: Colors.black26,
+        title: widget.tituloLinha != null 
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Rota',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w300,
+                            fontSize: 20,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'Bus',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    widget.tituloLinha!,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              )
+            : RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Rota',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w300,
+                        fontSize: 22,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    TextSpan(
+                      text: 'Bus',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 22,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                        shadows: [
+                          Shadow(
+                            offset: Offset(1, 1),
+                            blurRadius: 3.0,
+                            color: Colors.black26,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
         backgroundColor: Colors.transparent, // Transparente para mostrar gradiente
         foregroundColor: Colors.white,
         elevation: 0, // Remove sombra padrão
@@ -317,6 +456,13 @@ class _MapScreenState extends State<MapScreen> {
                       onMapCreated: (controller) {
                         _mapController = controller;
                         _mapController?.setMapStyle(_mapStyle);
+                        
+                        // Se há paradas destacadas, mostra-las quando o mapa estiver pronto
+                        if (widget.paradasDestacadas != null && widget.paradasDestacadas!.isNotEmpty) {
+                          Future.delayed(Duration(milliseconds: 500), () {
+                            _mostrarParadasDestacadas();
+                          });
+                        }
                       },
                       myLocationEnabled: true,
                       myLocationButtonEnabled: true,
